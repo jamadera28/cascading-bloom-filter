@@ -10,4 +10,4 @@ To compile:
 gcc -o filter main.c -lcrypto
 ```
 
-This may not work on some Macs due to weird issues linking the OpenSSL library, despite being on the system normally and/or with Homebrew.
+This may not work on some Macs due to weird issues linking the OpenSSL library, despite being on the system normally and/or with Homebrew. If this happens, please append the `include` directory of OpenSSL installed from Homebrew to your `CPATH` environment variable, and append the `lib` directory of OpenSSL installed from Homebrew to your `LIBRARY_PATH` evnironment variable.
