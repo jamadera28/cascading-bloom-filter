@@ -3,10 +3,21 @@
 #include <openssl/sha.h>
 #include <assert.h>
 #include <string.h>
+#include <time.h>
 
 #define FILTER_SIZE ((1<<20)/(sizeof(uint32_t)*8))
-#define NUM_CERTS (1<<10)
+// 2^20 bit array, organized as an array of 32-bit ints (4 bytes * 8 bits each)
+
+#define NUM_CERTS (1<<15)
+#define DATA_LEN 32
 #define print(test) printf("%s\n", test ? "revoked" : "valid")
+
+struct cert_t
+{
+    size_t len;
+    unsigned char data[32];
+    unsigned char hash[SHA_DIGEST_LENGTH];
+};
 
 void get_offset(uint32_t idx, uint32_t *row, uint32_t *bit)
 {
@@ -25,11 +36,8 @@ void get_hash_idx(int i, uint32_t *idx, unsigned char *hash)
         *idx = (hash[i+2] << 12) | (hash[i+1] << 4) |((hash[i] & 0xF0) >> 4);
 }
 
-int add_to_filter(unsigned char *cert, size_t len, uint32_t filter[])
+int add_to_filter(unsigned char *hash, uint32_t filter[])
 {
-    unsigned char hash[SHA_DIGEST_LENGTH];
-
-    SHA1( (unsigned char *) cert, len, hash);
     int i = 0;
     int num_chunks = 5;
     while (num_chunks > 0)
@@ -57,11 +65,8 @@ int add_to_filter(unsigned char *cert, size_t len, uint32_t filter[])
     return 0;
 }
 
-int is_cert_revoked(unsigned char *cert, size_t len, uint32_t *filters[])
+int is_cert_revoked(unsigned char *hash, uint32_t *filters[])
 {
-    unsigned char hash[SHA_DIGEST_LENGTH];
-
-    SHA1( (unsigned char *) cert, len, hash);
 
     for (int i = 0; i < SHA_DIGEST_LENGTH; i++)
         printf("%02x ", hash[i]);
@@ -106,54 +111,64 @@ int is_cert_revoked(unsigned char *cert, size_t len, uint32_t *filters[])
 
 int main(int argc, char *argv[])
 {
+
+    assert(FILTER_SIZE >= NUM_CERTS);
     // our 3 sample filters, 2 meant to be revoked, 1 valid
     uint32_t revoked1[FILTER_SIZE] = {0};
+    uint32_t    valid[FILTER_SIZE] = {0};
     uint32_t revoked2[FILTER_SIZE] = {0};
-    uint32_t valid[FILTER_SIZE] = {0};
-    uint32_t *filters[3] = {revoked1, valid, revoked2};
 
     printf("Size of uint32_t: %lu\n", sizeof(uint32_t));
     printf("FILTER_SIZE: %lu\n", FILTER_SIZE);
 
-    struct cert_t
-    {
-        size_t len;
-        unsigned char data[32];
-    };
-
     struct cert_t valid_certs[NUM_CERTS];
     struct cert_t revoked_certs[NUM_CERTS];
 
-    for (int i = 0, j = 0, k = 0; i < NUM_CERTS/4; i++)
+    memset(valid_certs, 0, (sizeof(struct cert_t)));
+    memset(revoked_certs, 0, (sizeof(struct cert_t)));
+
+    uint32_t *filters[3];
+
+    filters[0] = revoked1;
+    filters[1] = valid;
+    filters[2] = revoked2;
+
+    for (int i = 0, j = 0, k = 0; i < NUM_CERTS; i++)
     {
-        unsigned char rand_data[32];
+        unsigned char rand_data[DATA_LEN];
         arc4random_buf(rand_data, sizeof rand_data);
         struct cert_t rand_cert;
-        strncpy((char *)rand_cert.data, (char *)rand_data, 32);
-        rand_cert.len = 32;
+        rand_cert.len = DATA_LEN;
+        strncpy((char *)rand_cert.data, (char *)rand_data, rand_cert.len);
+        SHA1(rand_cert.data, rand_cert.len, rand_cert.hash);
 
         if (i % 4 == 0)
         {
-            add_to_filter(rand_cert.data, rand_cert.len, revoked1);
-            add_to_filter(rand_cert.data, rand_cert.len, revoked2);
-            strncpy((char *)revoked_certs[j].data, (char *)rand_cert.data, 32);
+            add_to_filter(rand_cert.hash, revoked1);
+            add_to_filter(rand_cert.hash, revoked2);
+            strncpy((char *)revoked_certs[j].data, (char *)rand_cert.data, DATA_LEN);
+            strncpy((char *)revoked_certs[j].hash, (char *)rand_cert.hash, SHA_DIGEST_LENGTH);
             revoked_certs[j].len = rand_cert.len;
             j++;
             //assert (is_cert_revoked(rand_cert.data, rand_cert.len, filters) == 1);
         }
         else
         {
-            add_to_filter(rand_cert.data, rand_cert.len, valid);
-            strncpy((char *)valid_certs[k].data, (char *)rand_cert.data, 32);
+            add_to_filter(rand_cert.hash, valid);
+            strncpy((char *)valid_certs[k].data, (char *)rand_cert.data, DATA_LEN);
+            strncpy((char *)valid_certs[k].hash, (char *)rand_cert.hash, SHA_DIGEST_LENGTH);
             valid_certs[k].len = rand_cert.len;
             k++;
             //assert (is_cert_revoked(rand_cert.data, rand_cert.len, filters) == 0);
         }
     }
+    srand(time(0));
+
     for (int i = 0; i < 5; i++)
     {
-        print(is_cert_revoked(valid_certs[i].data, valid_certs[i].len, filters));
-        print(is_cert_revoked(revoked_certs[i].data, revoked_certs[i].len, filters));
+        print(is_cert_revoked(valid_certs[i].hash, filters));
+        print(is_cert_revoked(revoked_certs[i].hash, filters));
+        putchar('\n');
     }
 
 }
