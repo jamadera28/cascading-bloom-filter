@@ -14,20 +14,20 @@ This may not work on some Macs due to weird issues linking the OpenSSL library, 
 
 ## Explanation
 
-This approach creates a 2^20 bit array to use as a filter. We then create three of these filters:
+This approach creates a 2<sup>20</sup> bit array to use as a filter. We then create three of these filters:
 
 
-1. if a bit is set in the first filter, then _that certificate_^* should be considered revoked.
-2. if a bit is set in the second filter, then _that certificate_^* should be considered valid.
-3. if a bit is set in the third filter, then _that certificate_^* should be considered revoked.
+1. if a bit is set in the first filter, then _that certificate_<sup>*</sup> should be considered revoked.
+2. if a bit is set in the second filter, then _that certificate_<sup>*</sup> should be considered valid.
+3. if a bit is set in the third filter, then _that certificate_<sup>*</sup> should be considered revoked.
 
 
-^* We decide which certificate corresponds to which bits in the filters by taking a `SHA1()` hash of the certificate---which here is just 32 bytes of randomly generated data---and getting the least significant 20 bits of the hash.
+<sup>*</sup> We decide which certificate corresponds to which bits in the filters by taking a `SHA1()` hash of the certificate---which here is just 32 bytes of randomly generated data---and getting the least significant 20 bits of the hash.
 Using those 20 bits as index into each filter, we set the bit at that position if the certificate is marked for revocation in the first and third filters, and only set the bit in the second filter if it is a valid certificate.
 For this demonstration, when adding certificates to the filters, we assume every iteration which is divisible by 4 generated a certficiate marked for revocation, and all other generated certificates are valid.
 
 
-The filters are organized as `sizeof(uint32_t)*8` (a.k.a. 32 bit) elements of an array, and are indexed accordingly as if each bit of the 32-bit integers are an element of the 2^20 bit array using the `get_offset` function. The true array of `uint32_t` has 32,768 items as a result (32,768 * (4 * 8) == 2^20).
+The filters are organized as `sizeof(uint32_t)*8` (a.k.a. 32 bit) elements of an array, and are indexed accordingly as if each bit of the 32-bit integers are an element of the 2^20 bit array using the `get_offset` function. The true array of `uint32_t` has 32,768 items as a result. This yields: 32,768 elements * (4 bytes * 8 bits/byte) == 2<sup>20</sup>.
 
 
 ### Caveats and Solutions to Them
