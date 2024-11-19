@@ -3,7 +3,6 @@
 #include <openssl/sha.h>
 #include <assert.h>
 #include <string.h>
-#include <time.h>
 
 #define FILTER_SIZE ((1<<20)/(sizeof(uint32_t)*8))
 // 2^20 bit array, organized as an array of 32-bit ints (4 bytes * 8 bits each)
@@ -162,7 +161,6 @@ int main(int argc, char *argv[])
             //assert (is_cert_revoked(rand_cert.data, rand_cert.len, filters) == 0);
         }
     }
-    srand(time(0));
 
     for (int i = 0; i < 5; i++)
     {
