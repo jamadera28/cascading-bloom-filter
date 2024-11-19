@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <string.h>
 
-#define FILTER_SIZE ((1<<20)/sizeof(uint32_t))
+#define FILTER_SIZE ((1<<20)/(sizeof(uint32_t)*8))
 #define NUM_CERTS (1<<10)
 #define print(test) printf("%s\n", test ? "revoked" : "valid")
 
@@ -16,12 +16,13 @@ void get_offset(uint32_t idx, uint32_t *row, uint32_t *bit)
 
 void get_hash_idx(int i, uint32_t *idx, unsigned char *hash)
 {
-    if (i % 2 == 1)
-        // if split, get the other half (4 bits) and then 16 bits (20 total)
-        *idx = ((hash[i] & 0xF0 )>> 4) + hash[i+1] + hash[i+2];
+    // select 20 bits from the hash, depending on which i iteration we are on:
+    if (i % 2 == 0)
+        // ... we split at the MSB -4
+        *idx = ((hash[i+2] & 0xF) << 16) | (hash[i+1] << 8) | (hash[i]);
     else
-        // get 16 bits and then half of the next byte (20 total bits)
-        *idx = hash[i] + hash[i+1] + (hash[i+2] & 0xF);
+        // ... else we split at LSB +4
+        *idx = (hash[i+2] << 12) | (hash[i+1] << 4) |((hash[i] & 0xF0) >> 4);
 }
 
 int add_to_filter(unsigned char *cert, size_t len, uint32_t filter[])
@@ -30,8 +31,8 @@ int add_to_filter(unsigned char *cert, size_t len, uint32_t filter[])
 
     SHA1( (unsigned char *) cert, len, hash);
     int i = 0;
-    int thumbprint = 5;
-    while (thumbprint > 0)
+    int num_chunks = 5;
+    while (num_chunks > 0)
     {
         uint32_t idx = 0;
         uint32_t row = 0;
@@ -50,9 +51,8 @@ int add_to_filter(unsigned char *cert, size_t len, uint32_t filter[])
             putchar( (((1u << bit) >> q) & 1) ? '1' : '0');
         putchar('\n');
         */
-
-        i += 2;
-        thumbprint--;
+        i+=2;
+        num_chunks--;
     }
     return 0;
 }
@@ -68,9 +68,9 @@ int is_cert_revoked(unsigned char *cert, size_t len, uint32_t *filters[])
     putchar('\n');
 
     int i = 0;
-    int thumbprint = 5;
+    int num_chunks = 5;
     int count_l0 = 0, count_l1 = 0, count_l2 =0;
-    while (thumbprint > 0)
+    while (num_chunks > 0)
     {
         uint32_t idx = 0;
         uint32_t row = 0;
@@ -95,7 +95,7 @@ int is_cert_revoked(unsigned char *cert, size_t len, uint32_t *filters[])
         count_l2 += (f2 ? 1 : 0);
 
         i += 2;
-        thumbprint--;
+        num_chunks--;
     }
     if (count_l1 == 0)
         return 0;
@@ -106,16 +106,14 @@ int is_cert_revoked(unsigned char *cert, size_t len, uint32_t *filters[])
 
 int main(int argc, char *argv[])
 {
+    // our 3 sample filters, 2 meant to be revoked, 1 valid
     uint32_t revoked1[FILTER_SIZE] = {0};
     uint32_t revoked2[FILTER_SIZE] = {0};
     uint32_t valid[FILTER_SIZE] = {0};
     uint32_t *filters[3] = {revoked1, valid, revoked2};
 
-    int count = 0;
-    for (int i = 0; i < FILTER_SIZE; i++){
-        count += 4;
-    }
-    printf("size = %i\n",count);
+    printf("Size of uint32_t: %lu\n", sizeof(uint32_t));
+    printf("FILTER_SIZE: %lu\n", FILTER_SIZE);
 
     struct cert_t
     {
@@ -146,10 +144,10 @@ int main(int argc, char *argv[])
         else
         {
             add_to_filter(rand_cert.data, rand_cert.len, valid);
-            //assert (is_cert_revoked(rand_cert.data, rand_cert.len, filters) == 0);
             strncpy((char *)valid_certs[k].data, (char *)rand_cert.data, 32);
             valid_certs[k].len = rand_cert.len;
             k++;
+            //assert (is_cert_revoked(rand_cert.data, rand_cert.len, filters) == 0);
         }
     }
     for (int i = 0; i < 5; i++)
